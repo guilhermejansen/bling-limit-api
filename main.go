@@ -28,9 +28,9 @@ func main() {
 
     http.HandleFunc("/api/filter", handlers.PayloadHandler)
 
-    fmt.Println("Servidor iniciado na porta 5000")
+    fmt.Println("Servidor iniciado na porta 5050")
 
-    if err := http.ListenAndServe(":5000", nil); err != nil {
+    if err := http.ListenAndServe(":5050", nil); err != nil {
         log.Fatalf("Erro ao iniciar o servidor: %v", err)
     }
 }

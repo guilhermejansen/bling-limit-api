@@ -59,7 +59,6 @@ func init() {
 }
 
 func sendViolationNotification(violation *ViolationReport) {
-
     message := fmt.Sprintf("Violação: Código %s excedeu o limite com %d tentativas. (Depósito ID: %s)", violation.Codigo, violation.Tentativas, violation.Deposito)
 
     callbackURL := os.Getenv("CALLBACK_ENDPOINT")
@@ -116,8 +115,16 @@ func PayloadHandler(w http.ResponseWriter, r *http.Request) {
     log.Printf("Recebeu %d payloads\n", len(payloads))
     client := utils.NewRedisClient()
 
+    var responsePayloads []map[string]interface{}
+
     for _, payload := range payloads {
-        body, ok := payload["body"].(map[string]interface{})
+        // Clonar o payload para modificar sem alterar o original
+        responsePayload := make(map[string]interface{})
+        for k, v := range payload {
+            responsePayload[k] = v
+        }
+
+        body, ok := responsePayload["body"].(map[string]interface{})
         if !ok {
             log.Printf("Payload inválido (body não é um map): %v\n", payload)
             continue
@@ -151,17 +158,6 @@ func PayloadHandler(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
-        // Ajustar os campos dentro de 'deposito' conforme solicitado
-        adjustDepositoFields(dataMap)
-
-        // Atualiza o 'data' dentro de 'body' com o JSON ajustado
-        dataBytes, err := json.Marshal(dataMap)
-        if err != nil {
-            log.Printf("Erro ao serializar dataMap: %v\n", err)
-            continue
-        }
-        body["data"] = string(dataBytes)
-
         blockedKey := "blocked:" + codigo
         blocked, _ := client.Exists(utils.Ctx, blockedKey).Result()
         if blocked > 0 {
@@ -191,13 +187,31 @@ func PayloadHandler(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
-        // Envia o payload ajustado na resposta
-        w.Header().Set("Content-Type", "application/json")
-        if err := json.NewEncoder(w).Encode(payload); err != nil {
-            log.Printf("Erro ao enviar a resposta: %v\n", err)
+        // Ajustar os campos dentro de 'deposito' conforme solicitado
+        adjustDepositoFields(dataMap)
+
+        // Serializar dataMap para string
+        dataBytes, err := json.Marshal(dataMap)
+        if err != nil {
+            log.Printf("Erro ao serializar dataMap: %v\n", err)
+            continue
         }
+        adjustedDataString := string(dataBytes)
+
+        // Atualizar o 'data' dentro de 'body' com o JSON ajustado
+        body["data"] = adjustedDataString
+
+        // Adicionar o payload ajustado à resposta
+        responsePayloads = append(responsePayloads, responsePayload)
     }
 
+    // Enviar a resposta como um array de payloads ajustados
+    w.Header().Set("Content-Type", "application/json")
+    if err := json.NewEncoder(w).Encode(responsePayloads); err != nil {
+        log.Printf("Erro ao enviar a resposta: %v\n", err)
+    }
+
+    // Registrar violações
     for _, report := range violations {
         log.Printf("Violação: Código %s excedeu o limite com %d tentativas. (Depósito ID: %s)\n", report.Codigo, report.Tentativas, report.Deposito)
     }
@@ -290,7 +304,7 @@ func adjustDepositoFields(dataMap map[string]interface{}) {
                 delete(deposito, "saldo")
             }
 
-            // Remover 'saldoVirtual' se ainda for string e convertê-lo para int
+            // Se 'saldoVirtual' ainda for string, convertê-lo para int
             saldoVirtualValue, ok := deposito["saldoVirtual"]
             if ok {
                 switch saldoVirtual := saldoVirtualValue.(type) {

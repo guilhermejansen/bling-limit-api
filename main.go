@@ -3,27 +3,49 @@ package main
 import (
 	"bling_limit/handlers"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
-	logFileName := "server.log"
+    logFileName := "server.log"
 
-	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalf("Erro ao abrir/criar o arquivo de log: %v", err)
-	}
-	defer logFile.Close()
+    logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+    if err != nil {
+        log.Fatalf("Erro ao abrir/criar o arquivo de log: %v", err)
+    }
+    defer logFile.Close()
 
-	log.SetOutput(logFile)
+    // Configura o logger para escrever tanto no console quanto no arquivo
+    multiWriter := io.MultiWriter(os.Stdout, logFile)
 
-	http.HandleFunc("/api/filter", handlers.PayloadHandler)
+    log.SetFlags(0)
+    log.SetPrefix("")
+    log.SetOutput(newCustomLogger(multiWriter))
 
-	fmt.Println("Servidor iniciado na porta 5000")
+    http.HandleFunc("/api/filter", handlers.PayloadHandler)
 
-	if err := http.ListenAndServe(":5000", nil); err != nil {
-		log.Fatalf("Erro ao iniciar o servidor: %v", err)
-	}
+    fmt.Println("Servidor iniciado na porta 5000")
+
+    if err := http.ListenAndServe(":5000", nil); err != nil {
+        log.Fatalf("Erro ao iniciar o servidor: %v", err)
+    }
+}
+
+type customLogger struct {
+    writer io.Writer
+}
+
+func newCustomLogger(w io.Writer) *customLogger {
+    return &customLogger{writer: w}
+}
+
+func (cl *customLogger) Write(bytes []byte) (int, error) {
+    now := time.Now()
+    timestamp := now.Format("02/01/2006 15:04:05")
+    message := fmt.Sprintf("%s %s", timestamp, string(bytes))
+    return cl.writer.Write([]byte(message))
 }

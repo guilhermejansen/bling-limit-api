@@ -37,6 +37,10 @@ cd bling_limit
 
 ```
 REDIS_ADDR=redis_host:6379
+REDIS_DB=0
+MAX_ATTEMPTS=3
+EXPIRE_TIME_SECONDS=5
+BLOCK_TIME_MINUTES=1
 CALLBACK_ENDPOINT=http://example.com/callback
 ```
 
